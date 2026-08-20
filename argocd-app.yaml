@@ -1,0 +1,23 @@
+# This file is NOT part of the watched repo's app manifests.
+# Apply it directly to your kind/minikube cluster (kubectl apply -f argocd-app.yaml)
+# to tell ArgoCD which repo/path to reconcile.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: gitops-lab
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/<you>/gitops-lab   # <-- replace with your repo
+    targetRevision: main
+    path: .
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: default
+  syncPolicy:
+    automated:
+      prune: false
+      selfHeal: false
+    syncOptions:
+      - CreateNamespace=true
