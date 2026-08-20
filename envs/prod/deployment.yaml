@@ -1,0 +1,33 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gitops-lab
+  labels:
+    app: gitops-lab
+    env: prod
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: gitops-lab
+  template:
+    metadata:
+      labels:
+        app: gitops-lab
+        env: prod
+    spec:
+      containers:
+        - name: web
+          image: nginxdemos/hello:latest
+          ports:
+            - containerPort: 80
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+          env:
+            - name: ENVIRONMENT
+              value: "prod"

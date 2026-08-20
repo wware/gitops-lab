@@ -1,0 +1,33 @@
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: gitops-lab-envs
+  namespace: argocd
+spec:
+  # The git directory generator will create one Application per directory
+  generators:
+  - git:
+      repoURL: https://github.com/<you>/gitops-lab
+      revision: main
+      directories:
+      - path: envs/*
+  template:
+    metadata:
+      # Use the directory name as part of the app name
+      name: 'gitops-lab-{{path.basename}}'
+    spec:
+      project: default
+      source:
+        repoURL: https://github.com/<you>/gitops-lab
+        targetRevision: main
+        path: '{{path}}'
+      destination:
+        server: https://kubernetes.default.svc
+        # Deploy each environment to its own namespace
+        namespace: '{{path.basename}}'
+      syncPolicy:
+        automated:
+          prune: false
+          selfHeal: false
+        syncOptions:
+          - CreateNamespace=true

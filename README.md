@@ -46,8 +46,30 @@ kubectl apply -f argocd-app.yaml
    ArgoCD flags `OutOfSync`. Flip `selfHeal: true` in `argocd-app.yaml` and
    reapply to see it auto-revert instead of just alerting.
 
+## ApplicationSet example
+
+This repo also includes an ApplicationSet example that deploys to multiple environments:
+
+```bash
+kubectl apply -f applicationset.yaml
+```
+
+The ApplicationSet uses the **git directory generator** to automatically create three Applications:
+- `gitops-lab-dev` → deploys `envs/dev/` to `dev` namespace (1 replica)
+- `gitops-lab-staging` → deploys `envs/staging/` to `staging` namespace (2 replicas)
+- `gitops-lab-prod` → deploys `envs/prod/` to `prod` namespace (3 replicas)
+
+Check the created applications:
+```bash
+kubectl get applications -n argocd
+kubectl get applicationsets -n argocd
+```
+
+To add a new environment, just create a new directory under `envs/` with manifests and the ApplicationSet will automatically pick it up on the next sync.
+
 ## Notes
 
 - `automated.prune`/`selfHeal` start `false` on purpose — sync manually at
   first so you see each diff before it applies.
 - Swap `nginxdemos/hello` for your own image once the mechanics are proven out.
+- The ApplicationSet pattern is powerful for managing multiple environments, clusters, or tenants from a single configuration.

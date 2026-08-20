@@ -1,0 +1,418 @@
+# ApplicationSet Examples
+# This file contains various ApplicationSet patterns for reference
+# These are examples only - copy and modify as needed
+
+---
+# Example 1: Git Directory Generator (Currently Used)
+# Creates one Application per directory under envs/
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: gitops-lab-envs
+  namespace: argocd
+spec:
+  generators:
+  - git:
+      repoURL: https://github.com/<you>/gitops-lab
+      revision: main
+      directories:
+      - path: envs/*
+  template:
+    metadata:
+      name: 'gitops-lab-{{path.basename}}'
+    spec:
+      project: default
+      source:
+        repoURL: https://github.com/<you>/gitops-lab
+        targetRevision: main
+        path: '{{path}}'
+      destination:
+        server: https://kubernetes.default.svc
+        namespace: '{{path.basename}}'
+      syncPolicy:
+        automated:
+          prune: false
+          selfHeal: false
+        syncOptions:
+          - CreateNamespace=true
+
+---
+# Example 2: List Generator
+# Explicitly define each environment with custom parameters
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: list-generator-example
+  namespace: argocd
+spec:
+  generators:
+  - list:
+      elements:
+      - env: dev
+        replicas: "1"
+        cpu: "100m"
+        memory: "64Mi"
+      - env: staging
+        replicas: "2"
+        cpu: "200m"
+        memory: "128Mi"
+      - env: prod
+        replicas: "3"
+        cpu: "500m"
+        memory: "256Mi"
+  template:
+    metadata:
+      name: 'myapp-{{env}}'
+      labels:
+        environment: '{{env}}'
+    spec:
+      project: default
+      source:
+        repoURL: https://github.com/<you>/gitops-lab
+        targetRevision: main
+        path: base
+        # Use Kustomize to override replicas
+        kustomize:
+          replicas:
+          - name: gitops-lab
+            count: '{{replicas}}'
+          # Can also use commonAnnotations, commonLabels, images, etc.
+      destination:
+        server: https://kubernetes.default.svc
+        namespace: '{{env}}'
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true
+        syncOptions:
+          - CreateNamespace=true
+
+---
+# Example 3: Git Files Generator
+# Read configuration from JSON/YAML files
+# Expects files like: config/dev.yaml, config/staging.yaml, etc.
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: git-files-generator-example
+  namespace: argocd
+spec:
+  generators:
+  - git:
+      repoURL: https://github.com/<you>/gitops-lab
+      revision: main
+      files:
+      - path: "config/*.yaml"
+  template:
+    metadata:
+      name: 'myapp-{{env.name}}'
+    spec:
+      project: default
+      source:
+        repoURL: https://github.com/<you>/gitops-lab
+        targetRevision: main
+        path: '{{env.path}}'
+      destination:
+        server: https://kubernetes.default.svc
+        namespace: '{{env.namespace}}'
+      syncPolicy:
+        automated: {}
+        syncOptions:
+          - CreateNamespace=true
+
+# Example config file (config/dev.yaml):
+# env:
+#   name: dev
+#   namespace: development
+#   path: envs/dev
+#   replicas: 1
+
+---
+# Example 4: Cluster Generator
+# Deploy to multiple registered Kubernetes clusters
+# Requires clusters to be registered in ArgoCD
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: cluster-generator-example
+  namespace: argocd
+spec:
+  generators:
+  - cluster:
+      selector:
+        matchLabels:
+          environment: production
+      # Optional: can also match on cluster name
+      # matchExpressions:
+      # - key: region
+      #   operator: In
+      #   values: [us-east-1, us-west-2]
+  template:
+    metadata:
+      name: 'myapp-{{name}}'
+    spec:
+      project: default
+      source:
+        repoURL: https://github.com/<you>/gitops-lab
+        targetRevision: main
+        path: base
+      destination:
+        server: '{{server}}'
+        namespace: myapp
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true
+
+---
+# Example 5: Matrix Generator
+# Combine two generators (apps × environments)
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: matrix-generator-example
+  namespace: argocd
+spec:
+  generators:
+  - matrix:
+      generators:
+      # First generator: list of applications
+      - list:
+          elements:
+          - app: frontend
+            port: "3000"
+          - app: backend
+            port: "8080"
+          - app: database
+            port: "5432"
+      # Second generator: list of environments
+      - list:
+          elements:
+          - env: dev
+            replicas: "1"
+          - env: staging
+            replicas: "2"
+          - env: prod
+            replicas: "3"
+  template:
+    metadata:
+      name: '{{app}}-{{env}}'
+      labels:
+        app: '{{app}}'
+        environment: '{{env}}'
+    spec:
+      project: default
+      source:
+        repoURL: https://github.com/<you>/gitops-lab
+        targetRevision: main
+        path: 'apps/{{app}}/base'
+        kustomize:
+          replicas:
+          - name: '{{app}}'
+            count: '{{replicas}}'
+      destination:
+        server: https://kubernetes.default.svc
+        namespace: '{{env}}-{{app}}'
+      syncPolicy:
+        automated: {}
+        syncOptions:
+          - CreateNamespace=true
+
+---
+# Example 6: SCM Provider Generator (GitHub)
+# Automatically discovers repositories in a GitHub org
+# Requires GitHub token in Secret
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: github-scm-example
+  namespace: argocd
+spec:
+  generators:
+  - scmProvider:
+      github:
+        organization: my-org
+        tokenRef:
+          secretName: github-token
+          key: token
+      filters:
+      # Only repos with "deploy" topic
+      - repositoryMatch: .*
+        labelMatch: deploy
+  template:
+    metadata:
+      name: '{{repository}}'
+    spec:
+      project: default
+      source:
+        repoURL: '{{url}}'
+        targetRevision: '{{branch}}'
+        path: kubernetes
+      destination:
+        server: https://kubernetes.default.svc
+        namespace: '{{repository}}'
+      syncPolicy:
+        automated: {}
+
+---
+# Example 7: Pull Request Generator
+# Create temporary environments for PRs
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: pr-generator-example
+  namespace: argocd
+spec:
+  generators:
+  - pullRequest:
+      github:
+        owner: my-org
+        repo: my-repo
+        tokenRef:
+          secretName: github-token
+          key: token
+      # Only PRs with "preview" label
+      labels:
+      - preview
+  template:
+    metadata:
+      name: 'pr-{{number}}-preview'
+    spec:
+      project: default
+      source:
+        repoURL: 'https://github.com/my-org/my-repo'
+        targetRevision: '{{head_sha}}'
+        path: kubernetes
+      destination:
+        server: https://kubernetes.default.svc
+        namespace: 'pr-{{number}}'
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true
+        syncOptions:
+          - CreateNamespace=true
+
+---
+# Example 8: Merge Generator
+# Combine parameters from multiple generators
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: merge-generator-example
+  namespace: argocd
+spec:
+  generators:
+  - merge:
+      mergeKeys:
+      - name
+      generators:
+      # Base configuration
+      - list:
+          elements:
+          - name: app1
+            namespace: default
+            replicas: 1
+          - name: app2
+            namespace: default
+            replicas: 1
+      # Override for production
+      - list:
+          elements:
+          - name: app1
+            replicas: 3
+            resources: high
+  template:
+    metadata:
+      name: '{{name}}'
+    spec:
+      project: default
+      source:
+        repoURL: https://github.com/<you>/gitops-lab
+        targetRevision: main
+        path: 'apps/{{name}}'
+      destination:
+        server: https://kubernetes.default.svc
+        namespace: '{{namespace}}'
+
+---
+# Example 9: Multi-Environment with Different Configs
+# Use git directory generator with path exclusion
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: selective-dirs-example
+  namespace: argocd
+spec:
+  generators:
+  - git:
+      repoURL: https://github.com/<you>/gitops-lab
+      revision: main
+      directories:
+      - path: envs/*
+        exclude: envs/archive/*  # Skip archived environments
+  template:
+    metadata:
+      name: 'app-{{path.basename}}'
+      annotations:
+        # Can add notifications, links, etc.
+        notifications.argoproj.io/subscribe.on-sync-succeeded.slack: my-channel
+    spec:
+      project: default
+      source:
+        repoURL: https://github.com/<you>/gitops-lab
+        targetRevision: main
+        path: '{{path}}'
+      destination:
+        server: https://kubernetes.default.svc
+        namespace: '{{path.basename}}'
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true
+        syncOptions:
+          - CreateNamespace=true
+        retry:
+          limit: 5
+          backoff:
+            duration: 5s
+            factor: 2
+            maxDuration: 3m
+
+---
+# Example 10: Progressive Rollout
+# Deploy to environments in sequence (using waves)
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: progressive-rollout-example
+  namespace: argocd
+spec:
+  generators:
+  - list:
+      elements:
+      - env: dev
+        wave: "0"
+      - env: staging
+        wave: "1"
+      - env: prod
+        wave: "2"
+  template:
+    metadata:
+      name: 'app-{{env}}'
+      annotations:
+        # ArgoCD will sync in wave order
+        argocd.argoproj.io/sync-wave: '{{wave}}'
+    spec:
+      project: default
+      source:
+        repoURL: https://github.com/<you>/gitops-lab
+        targetRevision: main
+        path: 'envs/{{env}}'
+      destination:
+        server: https://kubernetes.default.svc
+        namespace: '{{env}}'
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true
