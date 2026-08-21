@@ -1,0 +1,39 @@
+# Example ArgoCD Application manifest
+#
+# USAGE:
+# 1. Copy this file: cp argocd-app.yaml.example argocd-app.yaml
+# 2. Update the repoURL to point to your repository (GitHub, Gitea, etc.)
+# 3. Apply it once: kubectl apply -f argocd-app.yaml
+# 4. DO NOT commit argocd-app.yaml to git (it's in .gitignore)
+#
+# WHY NOT COMMIT THIS?
+# - Creates circular dependency (Application manages itself)
+# - Each user needs different repo URLs (their fork, their Gitea instance)
+# - This file is applied manually once, then ArgoCD watches the repo
+#
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: gitops-lab
+  namespace: argocd
+spec:
+  project: default
+  source:
+    # OPTION A: GitHub (replace with your username)
+    # repoURL: https://github.com/wware/gitops-lab
+
+    # OPTION B: Local Gitea (find IP with: docker inspect gitea | grep IPAddress)
+    # repoURL: http://172.22.0.3:3000/wware/gitops-lab.git
+
+    repoURL: https://github.com/wware/gitops-lab  # <-- UPDATE THIS
+    targetRevision: main
+    path: .
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: default
+  syncPolicy:
+    automated:
+      prune: false
+      selfHeal: false
+    syncOptions:
+      - CreateNamespace=true

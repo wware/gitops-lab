@@ -7,7 +7,7 @@ spec:
   # The git directory generator will create one Application per directory
   generators:
   - git:
-      repoURL: https://github.com/<you>/gitops-lab
+      repoURL: http://172.22.0.3:3000/wware/gitops-lab.git
       revision: main
       directories:
       - path: envs/*
@@ -18,7 +18,7 @@ spec:
     spec:
       project: default
       source:
-        repoURL: https://github.com/<you>/gitops-lab
+        repoURL: http://172.22.0.3:3000/wware/gitops-lab.git
         targetRevision: main
         path: '{{path}}'
       destination:
