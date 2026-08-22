@@ -1,0 +1,34 @@
+# ArgoCD Application for KEDA Demo
+#
+# USAGE:
+# 1. Copy this file: cp keda-demo-app.yaml.example keda-demo-app.yaml
+# 2. Update the repoURL to point to your repository
+# 3. Apply it: kubectl apply -f keda-demo-app.yaml
+# 4. DO NOT commit keda-demo-app.yaml to git (it's in .gitignore)
+#
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: keda-demo
+  namespace: argocd
+spec:
+  project: default
+  source:
+    # OPTION A: GitHub (replace with your username)
+    # repoURL: https://github.com/wware/gitops-lab
+
+    # OPTION B: Local Gitea
+    # repoURL: http://172.22.0.3:3000/wware/gitops-lab.git
+
+    repoURL: https://github.com/wware/gitops-lab  # <-- UPDATE THIS
+    targetRevision: main
+    path: keda-demo
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: keda-demo
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

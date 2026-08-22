@@ -1,0 +1,60 @@
+# This is a Job manifest to send test messages to the queue.
+# To send messages: kubectl create -f keda-demo/producer.yaml
+# The job will send 20 messages to the queue and exit.
+#
+# Watch scaling in action:
+#   kubectl get pods -n keda-demo -w
+#   kubectl get scaledobject -n keda-demo
+#   kubectl get hpa -n keda-demo
+
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: message-producer
+  namespace: keda-demo
+spec:
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+      - name: producer
+        image: python:3.12-slim
+        command:
+        - /bin/bash
+        - -c
+        - |
+          pip install pika==1.3.2
+          python3 -c '
+          import pika
+          import time
+
+          print("Connecting to RabbitMQ...", flush=True)
+          connection = pika.BlockingConnection(
+              pika.ConnectionParameters(
+                  host="rabbitmq",
+                  credentials=pika.PlainCredentials("guest", "guest")
+              )
+          )
+          channel = connection.channel()
+
+          # Declare queue (idempotent)
+          channel.queue_declare(queue="work-queue", durable=True)
+
+          # Send 20 messages
+          num_messages = 20
+          print(f"Sending {num_messages} messages to work-queue...", flush=True)
+
+          for i in range(1, num_messages + 1):
+              message = f"task-{i}"
+              channel.basic_publish(
+                  exchange="",
+                  routing_key="work-queue",
+                  body=message,
+                  properties=pika.BasicProperties(delivery_mode=2)  # persistent
+              )
+              print(f"Sent: {message}", flush=True)
+              time.sleep(0.1)  # Small delay between messages
+
+          connection.close()
+          print(f"Done! Sent {num_messages} messages.", flush=True)
+          '

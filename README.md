@@ -84,6 +84,34 @@ kubectl get applicationsets -n argocd
 
 To add a new environment, just create a new directory under `envs/` with manifests and the ApplicationSet will automatically pick it up on the next sync.
 
+## KEDA demo (queue-based autoscaling)
+
+See [keda-demo/](keda-demo/) for a hands-on demo of **KEDA (Kubernetes Event-Driven Autoscaling)** - automatic pod scaling based on queue depth.
+
+This demonstrates:
+- **Scale to zero**: Workers scale down to 0 pods when queue is empty
+- **Scale on demand**: Pods created automatically when messages arrive
+- **Real-world pattern**: Same approach for AWS SQS, Kafka, Redis, etc.
+
+Quick start:
+```bash
+# Install KEDA
+kubectl apply --server-side -f https://github.com/kedacore/keda/releases/download/v2.12.1/keda-2.12.1.yaml
+
+# Deploy demo
+kubectl create namespace keda-demo
+kubectl apply -f keda-demo/
+
+# Send messages and watch scaling
+kubectl run sender --image=python:3.12-slim --rm -i --restart=Never -n keda-demo -- \
+  bash -c "pip install pika && python3 -c 'import pika; c=pika.BlockingConnection(pika.ConnectionParameters(\"rabbitmq\",credentials=pika.PlainCredentials(\"guest\",\"guest\"))); ch=c.channel(); ch.queue_declare(queue=\"work-queue\",durable=True); [ch.basic_publish(\"\",\"work-queue\",f\"task-{i}\".encode()) for i in range(20)]'"
+
+# Watch workers scale up
+kubectl get pods -n keda-demo -w
+```
+
+See [docs/QUEUE-BASED-SCALING.md](docs/QUEUE-BASED-SCALING.md) for production patterns with AWS SQS, Kafka, and more.
+
 ## Notes
 
 - `automated.prune`/`selfHeal` start `false` on purpose — sync manually at
@@ -141,6 +169,7 @@ The difference is **scale, security, and operational maturity**, not the fundame
 - **[docs/GITOPS.md](docs/GITOPS.md)** - GitOps architecture deep dive
 - **[docs/WHY_KUBERNETES.md](docs/WHY_KUBERNETES.md)** - Kubernetes fundamentals and when to use it
 - **[docs/applicationset-guide.md](docs/applicationset-guide.md)** - ApplicationSet patterns and examples
+- **[docs/QUEUE-BASED-SCALING.md](docs/QUEUE-BASED-SCALING.md)** - KEDA and queue-based autoscaling patterns
 
 ---
 
