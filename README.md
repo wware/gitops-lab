@@ -14,7 +14,127 @@ The structure is intentionally production-like (not a toy example), but simplifi
 - **Intentional simplifications**: nginxdemos/hello instead of real apps, no secrets management, local cluster
 - **Path to production**: See [What Changes for Production](#what-changes-for-production) below
 
-**Start here**: For a complete step-by-step guide, see [docs/HOWTO.md](docs/HOWTO.md)
+---
+
+## Learning Track: Production Deployment Patterns
+
+**Goal:** Make informed decisions about deploying Kubernetes applications in production.
+
+**Time:** 3-5 hours total | **Prerequisites:** Basic Kubernetes knowledge ([start here](https://github.com/wware/k8s-hack) if new to K8s)
+
+### Core Track: GitOps Foundations
+
+#### 1. Local GitOps Setup
+**Do:** [docs/HOWTO.md](docs/HOWTO.md) - Set up kind + ArgoCD + Gitea
+**Insight:** GitOps inverts control: instead of `kubectl apply`, you push to git and ArgoCD reconciles. Git becomes the control plane.
+**Verify:** ArgoCD UI shows your app, changing `deployment.yaml` triggers sync
+**Time:** 45 minutes
+**Why this matters:** Pull-based deployments are more secure and auditable than push-based CI/CD
+
+#### 2. Drift Detection & Self-Healing
+**Do:** `kubectl scale deployment/gitops-lab --replicas=5`, watch ArgoCD flag it as OutOfSync
+**Insight:** Cluster state vs git state is *always* visible. Enable self-heal and ArgoCD auto-reverts manual changes.
+**Verify:** ArgoCD shows diff, self-heal brings it back to git's `replicas: 3`
+**Time:** 15 minutes
+**Going deeper:** [docs/GITOPS.md](docs/GITOPS.md) explains reconciliation loops
+
+#### 3. Multi-Environment Deployment
+**Do:** `kubectl apply -f applicationset.yaml` - Deploy dev/staging/prod from one config
+**Insight:** ApplicationSets eliminate YAML duplication. One template generates three Applications.
+**Verify:** `kubectl get applications -n argocd` shows three apps
+**Time:** 20 minutes
+**Going deeper:** [docs/applicationset-guide.md](docs/applicationset-guide.md)
+
+#### 4. Queue-Based Autoscaling (KEDA)
+**Do:** [keda-demo/README.md](keda-demo/README.md) - Deploy RabbitMQ + workers, send messages
+**Insight:** Autoscaling doesn't require always-on infrastructure. Workers scale 0→N based on actual work (queue depth), not CPU guesses.
+**Verify:** Send 20 messages → 4 workers spawn → process queue → scale to 0
+**Time:** 45 minutes
+**Why this matters:** Most production workloads are bursty. Scale-to-zero saves money.
+
+---
+
+### Decision Point: Choose Your Deployment Model
+
+**Time to make a cost/complexity tradeoff.** Read all three docs, then pick one to implement:
+
+#### Option A: Single-Box Autoscaling ($45/month)
+**Read:** [docs/SINGLE_BOX_AUTOSCALE.md](docs/SINGLE_BOX_AUTOSCALE.md)
+**Best for:** Side projects, MVPs, solo developer, <1000 req/sec
+**Insight:** You don't need Kubernetes. Docker + Python autoscaler + systemd is simpler and cheaper.
+**Time:** 2 hours to implement
+**Trade-off:** No high availability, manual deploys, single point of failure
+
+#### Option B: AWS Auto Scaling Groups ($10/month)
+**Read:** [docs/AWS_AUTOSCALING.md](docs/AWS_AUTOSCALING.md)
+**Best for:** Batch workloads (rendering, transcoding), scale-to-zero, cost-sensitive
+**Insight:** AWS-native autoscaling (ASG + SQS) gives you KEDA-like behavior without Kubernetes complexity.
+**Time:** 3 hours to implement (Terraform + worker script)
+**Trade-off:** AWS lock-in, 60-120 second scaling lag, Spot interruptions
+
+#### Option C: Real EKS Deployment ($163+/month)
+**Read:** [docs/REAL_EKS_DEPLOY.md](docs/REAL_EKS_DEPLOY.md)
+**Best for:** Production apps, multi-region, team scale, high availability
+**Insight:** EKS cost is justified when you need: always-on services, multi-env, compliance, or >3 developers.
+**Time:** 3 hours for experiment, 2 weeks for production-ready
+**Trade-off:** Expensive, complex, but industry-standard and portable
+
+**Can't decide?** Decision matrix in each doc compares cost/setup/scale/HA/GitOps.
+
+---
+
+### Side Quests (Optional Deep Dives)
+
+#### A. EKS Emulation (Local Multi-Node)
+**Read:** [docs/EKS_EMULATION.md](docs/EKS_EMULATION.md)
+**Do:** Set up kubeadm across 2-3 home LAN machines, add MetalLB
+**Insight:** 90% of EKS behavior is just Kubernetes. Practice multi-node mechanics without AWS costs.
+**Time:** 3-4 hours
+**When to do this:** Before spending on EKS, after outgrowing single-box
+
+#### B. Queue-Based Scaling Deep Dive
+**Read:** [docs/QUEUE-BASED-SCALING.md](docs/QUEUE-BASED-SCALING.md)
+**Insight:** SQS, Kafka, Redis—same pattern everywhere. Learn once, use across AWS/GCP/Azure.
+**When to do this:** After KEDA demo, before choosing deployment model
+
+#### C. Kubernetes Logging
+**Read:** [k8s-hack/LOGGING.md](https://github.com/wware/k8s-hack/blob/main/LOGGING.md) (in sibling repo)
+**Insight:** Stdout → DaemonSet → Loki is the evolution of syslog. Structured JSON logs + automatic metadata = correlation nirvana.
+**When to do this:** When you have >3 services and grep-ing kubectl logs becomes painful
+
+---
+
+### Graduation: Production Checklist
+
+After completing the core track + one deployment option, you should be able to:
+
+- [ ] Explain why GitOps is pull-based, not push-based
+- [ ] Demonstrate drift detection and self-healing
+- [ ] Deploy the same app to dev/staging/prod with ApplicationSets
+- [ ] Scale workloads based on queue depth (not just CPU)
+- [ ] Make a cost-informed decision: single-box vs ASG vs EKS
+- [ ] Justify *not* using Kubernetes (when appropriate)
+
+**What's missing for real production?** See [What Changes for Production](#what-changes-for-production) below:
+- Secrets management (External Secrets, SOPS)
+- Monitoring (Prometheus, Grafana, Loki)
+- Alerting (AlertManager, PagerDuty)
+- RBAC, network policies, image scanning
+
+---
+
+### Cross-Repo Learning Path
+
+**Recommended order for complete Kubernetes journey:**
+
+1. **[k8s-hack](https://github.com/wware/k8s-hack)** - Learn Kubernetes fundamentals (Deployments, Services, StatefulSets)
+2. **[k8s-hack/WHY_KUBERNETES.md](https://github.com/wware/k8s-hack/blob/main/WHY_KUBERNETES.md)** - Understand when (and when not) to use K8s
+3. **gitops-lab** (this repo) - Learn production deployment patterns (GitOps, KEDA, cost decisions)
+4. **[k8s-hack/LOGGING.md](https://github.com/wware/k8s-hack/blob/main/LOGGING.md)** - Add observability (logs, metrics, traces)
+
+**Total time:** Weekend project → production-ready knowledge in ~10-15 hours
+
+---
 
 ## Repo layout
 
